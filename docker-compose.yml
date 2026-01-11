@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  # 1. MLflow Tracking Server (Experiment Tracking)
+  mlflow-tracking:
+    image: ghcr.io/mlflow/mlflow:v2.10.2
+    container_name: mlflow_server
+    ports:
+      - "5000:5000"
+    environment:
+      - MLFLOW_BACKEND_STORE_URI=sqlite:////mlflow/mlflow.db
+      - MLFLOW_DEFAULT_ARTIFACT_ROOT=s3://mlflow-artifacts
+    volumes:
+      - ./mlruns:/mlflow
+    command: >
+      mlflow server 
+      --backend-store-uri sqlite:////mlflow/mlflow.db
+      --default-artifact-root /mlflow/artifacts
+      --host 0.0.0.0
+
+  # 2. Prediction API (The Model Serving Logic)
+  prediction-api:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: prediction_api
+    ports:
+      - "8000:8000"
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow-tracking:5000
+    depends_on:
+      - mlflow-tracking
+    volumes:
+      - ./src:/app/src  # Hot reload for development
+    command: uvicorn src.app:app --host 0.0.0.0 --port 8000 --reload
+
+  # 3. MinIO (Optional - S3 Mock for Artifacts)
+  # minio:
+  #   image: minio/minio
+  #   ports:
+  #     - "9000:9000"
+  #     - "9001:9001"
+  #   command: server /data --console-address ":9001"
