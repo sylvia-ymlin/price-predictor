@@ -1,6 +1,7 @@
 # Housing Prices Predictor System
 
-**Live Demo:** https://prices-predictor-api-52bpgfwy6q-uc.a.run.app/docs
+**Live Demo:** https://prices-predictor-api-52bpgfwy6q-uc.a.run.app/docs  
+*Note: Demo may be offline between interviews to save Cloud Run costs.*
 
 ## Why This Exists
 
@@ -14,7 +15,7 @@ I built this end-to-end MLOps system (ZenML + MLflow + Cloud Run) to learn that 
 
 ### Training in Dockerfile = 10-minute builds every time
 
-**Problem:** I put `RUN python scripts/train_and_export.py` in the Dockerfile (line 27). Every code change meant rebuilding the image, which meant retraining the model. Deploy time went from 2 minutes to 12 minutes.
+**Problem:** I put `RUN python scripts/train_and_export.py` in the Dockerfile's build stage. Every code change meant rebuilding the image, which meant retraining the model. Deploy time went from 2 minutes to 12 minutes.
 
 **Solution:** I kept it because it guarantees the model matches the code version—no "works on my machine" issues. But I added `ARG MODEL_VERSION` as a cache-buster and used Cloud Build instead of local builds to parallelize.
 
@@ -26,15 +27,15 @@ I built this end-to-end MLOps system (ZenML + MLflow + Cloud Run) to learn that 
 
 **Solution:** Set `--timeout 300` and `--min-instances 0` (to save money). Added a `/health` endpoint that preloads the model during container startup. For production traffic, I'd use `--min-instances 1` or a separate warming service.
 
-**Lesson:** Serverless isn't "set and forget." You choose: pay for idle instances (min-instances > 0) or pay in latency (cold starts). There's no free lunch. Also, model size matters—I should've quantized the XGBoost model to reduce load time.
+**Lesson:** Serverless isn't "set and forget." You choose: pay for idle instances (min-instances > 0) or pay in latency (cold starts). There's no free lunch. Next iteration: quantize the XGBoost model to reduce load time from 12s to ~5s.
 
 ### A/B testing needs more than traffic splitting
 
 **Problem:** Cloud Run's `--to-tags green=50,blue=50` splits traffic, but I had no way to know which model version served which request. Logs just showed "200 OK" with no version info.
 
-**Solution:** Added `MODEL_VERSION` as a Docker build arg (line 24 in Dockerfile), injected it into every API response, and logged it. Now I can correlate prediction errors with model versions in Cloud Logging.
+**Solution:** Added `MODEL_VERSION` as a Docker build arg, injected it into every API response, and logged it. Now I can correlate prediction errors with model versions in Cloud Logging.
 
-**Lesson:** A/B testing infrastructure is 20% routing, 80% observability. Without version tracking in logs, you can't tell if v2 is actually better than v1. I should've also added request IDs to trace predictions end-to-end.
+**Lesson:** A/B testing infrastructure is 20% routing, 80% observability. Without version tracking in logs, you can't tell if v2 is actually better than v1. Next iteration: add request IDs to trace predictions end-to-end.
 
 ## Architecture
 
@@ -60,7 +61,7 @@ I built this end-to-end MLOps system (ZenML + MLflow + Cloud Run) to learn that 
 **Key insights:**
 - XGBoost vs Random Forest: 0.4% R² difference. In production, I'd choose based on inference speed.
 - Diminishing returns: Linear Regression → XGBoost = 3% improvement for 10x more compute time.
-- Error distribution: Model struggles with luxury homes (>$400k). Future work: separate models for price ranges.
+- Known limitation: Model struggles with luxury homes (>$400k). Solution for next iteration: separate models per price range.
 
 ## Quick Start
 
@@ -121,7 +122,7 @@ The `deploy_ab_test.sh` script deploys two model versions with 50/50 traffic spl
 
 - **Better features:** Add external data (school ratings, crime rates) to improve luxury home predictions
 - **Production monitoring:** Automatic retraining when prediction drift detected
-- **Cost optimization:** Current deployment costs ~$15/month, can reduce with serverless optimizations
+- **Performance optimization:** Quantize model to reduce cold start latency; add request tracing
 
 ## The One-Sentence Summary
 
